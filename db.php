@@ -146,6 +146,32 @@ try {
         if (!$stmtColAc->fetch()) {
             $db->exec("ALTER TABLE `user_settings` ADD COLUMN `assistant_chat_tokens` INT DEFAULT 512 AFTER `meeting_chat_tokens`");
         }
+
+        // Ensure spaces table exists
+        $stmtSpaces = $db->query("SHOW TABLES LIKE 'spaces'");
+        if (!$stmtSpaces->fetch()) {
+            $db->exec("CREATE TABLE IF NOT EXISTS `spaces` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `name` VARCHAR(255) NOT NULL,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        }
+
+        // Ensure space_recordings table exists
+        $stmtSpaceRecs = $db->query("SHOW TABLES LIKE 'space_recordings'");
+        if (!$stmtSpaceRecs->fetch()) {
+            $db->exec("CREATE TABLE IF NOT EXISTS `space_recordings` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `space_id` INT NOT NULL,
+                `recording_id` INT NOT NULL,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `unique_space_rec` (`space_id`, `recording_id`),
+                FOREIGN KEY (`space_id`) REFERENCES `spaces` (`id`) ON DELETE CASCADE,
+                FOREIGN KEY (`recording_id`) REFERENCES `recordings` (`id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        }
     }
 } catch (PDOException $e) {
     // getDB() inside API calls will trigger exit and display the error

@@ -141,6 +141,7 @@ const routes = {
     'home': { title: 'Home', render: renderHome, auth: false },
     'dashboard': { title: 'Dashboard Workspace', render: renderDashboard, auth: true },
     'memory': { title: 'Memory', render: renderBrain, auth: true },
+    'space': { title: 'Spaces', render: renderSpace, auth: true },
     'assistant': { title: 'Assistant', render: renderMyth, auth: true },
     'settings': { title: 'Settings & API Keys', render: renderSettings, auth: true }
 };
@@ -297,6 +298,26 @@ function getSkeletonHtml(route) {
         `;
     }
 
+    if (route === 'space') {
+        return `
+            <div class="page-section skeleton-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 20px;">
+                    <div>
+                        <div class="skeleton-shimmer" style="width: 150px; height: 35px; border-radius: 8px; margin-bottom: 10px;"></div>
+                        <div class="skeleton-shimmer" style="width: 250px; height: 16px; border-radius: 6px;"></div>
+                    </div>
+                    <div class="skeleton-shimmer" style="width: 140px; height: 40px; border-radius: var(--radius-full);"></div>
+                </div>
+                <div class="skeleton-shimmer" style="width: 100%; max-width: 400px; height: 45px; border-radius: var(--radius-full); margin-bottom: 30px;"></div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px;">
+                    <div class="skeleton-shimmer" style="height: 120px; border-radius: 14px;"></div>
+                    <div class="skeleton-shimmer" style="height: 120px; border-radius: 14px;"></div>
+                    <div class="skeleton-shimmer" style="height: 120px; border-radius: 14px;"></div>
+                </div>
+            </div>
+        `;
+    }
+
     if (route === 'memory') {
         return `
             <div class="page-section skeleton-section">
@@ -446,6 +467,7 @@ function updateHeaderLinks() {
         const desktopHtml = `
             <a href="${window.basePath}dashboard" class="nav-link" onclick="navigateTo('dashboard'); return false;">Dashboard</a>
             <a href="${window.basePath}memory" class="nav-link" onclick="navigateTo('memory'); return false;">Memory</a>
+            <a href="${window.basePath}space" class="nav-link" onclick="navigateTo('space'); return false;">Space</a>
             <a href="${window.basePath}assistant" class="nav-link" onclick="navigateTo('assistant'); return false;">Assistant</a>
             <a href="${window.basePath}settings" class="nav-link" onclick="navigateTo('settings'); return false;"><i class="fa-solid fa-gear"></i> Settings</a>
             <button class="nav-btn-secondary" onclick="handleLogout()" style="margin-left: 8px;">Logout</button>
@@ -453,6 +475,7 @@ function updateHeaderLinks() {
         const mobileHtml = `
             <a href="${window.basePath}dashboard" class="nav-link" onclick="navigateTo('dashboard'); return false;">Dashboard</a>
             <a href="${window.basePath}memory" class="nav-link" onclick="navigateTo('memory'); return false;">Memory</a>
+            <a href="${window.basePath}space" class="nav-link" onclick="navigateTo('space'); return false;">Space</a>
             <a href="${window.basePath}assistant" class="nav-link" onclick="navigateTo('assistant'); return false;">Assistant</a>
             <a href="${window.basePath}settings" class="nav-link" onclick="navigateTo('settings'); return false;">Settings</a>
             <button class="nav-btn" onclick="handleLogout()" style="width: 100%; margin-top: 15px;"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
@@ -1369,6 +1392,609 @@ async function handleDeleteRecording(id) {
         }
     );
 }
+
+// --- VIEW: SPACES PAGE ---
+async function renderSpace(container) {
+    container.innerHTML = `
+        <div class="page-section">
+            <div class="brain-header-bar" style="margin-bottom: 20px;">
+                <div>
+                    <h1 class="type-h3">Spaces</h1>
+                    <p class="type-body-14" style="color: var(--text-secondary);">Organize and group your meeting recordings into custom spaces.</p>
+                </div>
+                
+                <div>
+                    <button class="nav-btn" onclick="openCreateSpaceModal()" style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-folder-plus"></i> Create Space
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search Bar for Spaces -->
+            <div style="margin-bottom: 30px;">
+                <div class="search-box-wrapper" style="max-width: 100%;">
+                    <i class="fa-solid fa-magnifying-glass search-box-icon"></i>
+                    <input type="text" class="search-box-input" placeholder="Search spaces by name..." id="space-search-input" oninput="handleSpaceSearch(this.value)">
+                </div>
+            </div>
+            
+            <div class="recording-card-grid" id="spaces-list-mount">
+                <div class="skeleton-shimmer" style="height: 140px; border-radius: var(--radius-md);"></div>
+                <div class="skeleton-shimmer" style="height: 140px; border-radius: var(--radius-md);"></div>
+                <div class="skeleton-shimmer" style="height: 140px; border-radius: var(--radius-md);"></div>
+            </div>
+        </div>
+    `;
+
+    fetchSpaces();
+}
+
+let spaceSearchVal = '';
+let spaceSearchTimeout = null;
+window.handleSpaceSearch = function(val) {
+    spaceSearchVal = val.toLowerCase();
+    
+    const mount = document.getElementById('spaces-list-mount');
+    if (mount) {
+        mount.innerHTML = `
+            <div class="skeleton-shimmer" style="height: 140px; border-radius: var(--radius-md);"></div>
+            <div class="skeleton-shimmer" style="height: 140px; border-radius: var(--radius-md);"></div>
+            <div class="skeleton-shimmer" style="height: 140px; border-radius: var(--radius-md);"></div>
+        `;
+    }
+
+    clearTimeout(spaceSearchTimeout);
+    spaceSearchTimeout = setTimeout(() => {
+        filterAndRenderSpaces();
+    }, 300);
+};
+
+let loadedSpaces = [];
+async function fetchSpaces() {
+    const mount = document.getElementById('spaces-list-mount');
+    if (!mount) return;
+
+    try {
+        const res = await fetch(`${window.basePath}api.php?action=get_spaces`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            loadedSpaces = data.spaces || [];
+            filterAndRenderSpaces();
+        } else {
+            mount.innerHTML = `<div style="grid-column: 1 / -1; color: var(--color-tomato);">Failed to load spaces: ${data.message}</div>`;
+        }
+    } catch (e) {
+        console.error(e);
+        mount.innerHTML = `<div style="grid-column: 1 / -1; color: var(--color-tomato);">An error occurred while fetching spaces.</div>`;
+    }
+}
+
+function filterAndRenderSpaces() {
+    const mount = document.getElementById('spaces-list-mount');
+    if (!mount) return;
+
+    const filtered = loadedSpaces.filter(space => space.name.toLowerCase().includes(spaceSearchVal));
+
+    if (filtered.length === 0) {
+        mount.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 60px 10px; color: var(--text-secondary);">
+                <i class="fa-regular fa-folder" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 20px; display:block;"></i>
+                <h3 class="type-h3-20" style="margin-bottom:8px;">No Spaces Found</h3>
+                <p class="type-body-14" style="max-width: 380px; margin: 0 auto;">Create a space to organize your recordings, or try a different search term.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    filtered.forEach(space => {
+        const recCount = space.recordings ? space.recordings.length : 0;
+        
+        html += `
+            <div class="space-card-wrapper" id="space-card-${space.id}" style="background: var(--bg-surface-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 24px; display: flex; flex-direction: column; gap: 15px; transition: var(--transition-smooth); position: relative; box-shadow: var(--shadow-sm);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
+                    <div>
+                        <h3 class="type-h3-20" style="font-family: var(--font-cormorant-garamond); font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 4px;">${escapeHtml(space.name)}</h3>
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); margin:0;"><i class="fa-regular fa-file-audio"></i> ${recCount} ${recCount === 1 ? 'meeting' : 'meetings'} added</p>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="openAddMeetingToSpaceModal(${space.id})" class="action-btn-small" title="Add Meeting"><i class="fa-solid fa-plus"></i></button>
+                        <button onclick="openEditSpaceModal(${space.id}, \`${escapeHtml(space.name).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)" class="action-btn-small" title="Edit Space"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="toggleSpaceDropdown(${space.id})" class="action-btn-small dropdown-toggle-btn" id="space-dropdown-btn-${space.id}" title="Toggle Recordings"><i class="fa-solid fa-chevron-down"></i></button>
+                    </div>
+                </div>
+
+                <!-- Dropdown list of recordings -->
+                <div id="space-recordings-dropdown-${space.id}" class="space-recordings-dropdown">
+                    ${renderSpaceDropdownRecordings(space)}
+                </div>
+            </div>
+        `;
+    });
+
+    mount.innerHTML = html;
+}
+
+function renderSpaceDropdownRecordings(space) {
+    if (!space.recordings || space.recordings.length === 0) {
+        return `<div style="font-size: 0.85rem; color: var(--text-muted); font-style: italic; padding: 5px 0;">No meetings added to this space yet. Click the + icon to add some.</div>`;
+    }
+
+    let html = '';
+    space.recordings.forEach(rec => {
+        html += `
+            <div class="space-recording-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); transition: var(--transition-fast); cursor: pointer;" onclick="openRecordingDetailModal(${rec.id})">
+                <div style="min-width: 0; flex: 1;">
+                    <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(rec.title)}</h4>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; gap: 12px;">
+                        <span><i class="fa-regular fa-calendar-days"></i> ${rec.date_formatted}</span>
+                        <span><i class="fa-solid fa-clock"></i> ${rec.duration_minutes || 0} mins</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px;" onclick="event.stopPropagation()">
+                    <button onclick="handleRemoveFromSpace(${space.id}, ${rec.id})" class="action-btn-small delete" title="Remove from Space" style="width:28px; height:28px;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+        `;
+    });
+    return html;
+}
+
+window.toggleSpaceDropdown = function(spaceId) {
+    const dropdown = document.getElementById(`space-recordings-dropdown-${spaceId}`);
+    const btn = document.getElementById(`space-dropdown-btn-${spaceId}`);
+    const card = document.getElementById(`space-card-${spaceId}`);
+    if (!dropdown || !btn) return;
+
+    const isCurrentlyClosed = dropdown.style.display === 'none' || !dropdown.style.display;
+
+    // Close all other dropdowns
+    document.querySelectorAll('.space-recordings-dropdown').forEach(el => {
+        el.style.display = 'none';
+    });
+    document.querySelectorAll('.dropdown-toggle-btn i').forEach(i => {
+        i.className = 'fa-solid fa-chevron-down';
+    });
+    document.querySelectorAll('.space-card-wrapper').forEach(c => {
+        c.classList.remove('dropdown-open');
+    });
+
+    if (isCurrentlyClosed) {
+        dropdown.style.display = 'flex';
+        btn.querySelector('i').className = 'fa-solid fa-chevron-up';
+        if (card) {
+            card.classList.add('dropdown-open');
+        }
+    } else {
+        dropdown.style.display = 'none';
+        btn.querySelector('i').className = 'fa-solid fa-chevron-down';
+        if (card) {
+            card.classList.remove('dropdown-open');
+        }
+    }
+};
+
+window.handleRemoveFromSpace = async function(spaceId, recId) {
+    showCustomConfirm(
+        "Remove from Space?",
+        "Are you sure you want to remove this meeting recording from this space?",
+        async () => {
+            try {
+                const res = await fetch(`${window.basePath}api.php?action=remove_recording_from_space`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ space_id: spaceId, recording_id: recId })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showCustomToast("Recording removed from space.");
+                    fetchSpaces();
+                } else {
+                    showCustomToast(data.message, "error");
+                }
+            } catch (e) {
+                console.error(e);
+                showCustomToast("Connection error", "error");
+            }
+        }
+    );
+};
+
+window.openCreateSpaceModal = function() {
+    const html = `
+        <div style="margin-bottom: 20px;">
+            <h3 class="type-h3-20" style="margin-bottom: 6px;">Create New Space</h3>
+            <p class="type-body-14" style="color: var(--text-secondary);">Organize your recordings in a dedicated workspace space.</p>
+        </div>
+        
+        <form onsubmit="submitCreateSpace(event)">
+            <div class="form-group">
+                <label class="form-label">Space Name</label>
+                <input type="text" class="form-control" id="create-space-name" required placeholder="e.g. Work Projects">
+            </div>
+            
+            <div id="create-space-error" style="color:var(--color-crimson); font-size:0.85rem; margin-bottom:15px; display:none;"></div>
+            
+            <button type="submit" id="create-space-submit-btn" class="nav-btn" style="width:100%; padding:12px;">Create Space</button>
+        </form>
+    `;
+    openSpaceActionModal(html);
+};
+
+window.submitCreateSpace = async function(e) {
+    e.preventDefault();
+    const errNode = document.getElementById('create-space-error');
+    if (errNode) errNode.style.display = 'none';
+    
+    const nameInput = document.getElementById('create-space-name');
+    const name = nameInput.value.trim();
+    if (!name) return;
+
+    const btn = document.getElementById('create-space-submit-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Creating...';
+    }
+
+    try {
+        const res = await fetch(`${window.basePath}api.php?action=create_space`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            toggleSpaceActionModal(null);
+            showCustomToast("Space created successfully.");
+            fetchSpaces();
+        } else {
+            if (errNode) {
+                errNode.innerText = data.message;
+                errNode.style.display = 'block';
+            }
+        }
+    } catch (ex) {
+        console.error(ex);
+        if (errNode) {
+            errNode.innerText = "Failed to connect to server.";
+            errNode.style.display = 'block';
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Create Space';
+        }
+    }
+};
+
+window.openEditSpaceModal = function(spaceId, currentName) {
+    const html = `
+        <div style="margin-bottom: 20px;">
+            <h3 class="type-h3-20" style="margin-bottom: 6px;">Manage Space</h3>
+            <p class="type-body-14" style="color: var(--text-secondary);">Update name or delete this space.</p>
+        </div>
+        
+        <form onsubmit="submitEditSpace(event, ${spaceId})">
+            <div class="form-group">
+                <label class="form-label">Space Name</label>
+                <input type="text" class="form-control" id="edit-space-name" value="${escapeHtml(currentName)}" required placeholder="e.g. Work Projects">
+            </div>
+            
+            <div id="edit-space-error" style="color:var(--color-crimson); font-size:0.85rem; margin-bottom:15px; display:none;"></div>
+            
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button type="button" class="nav-btn-secondary" style="flex: 1; border-color: var(--color-tomato); color: var(--color-tomato); padding:12px;" onclick="handleDeleteSpace(${spaceId})">Delete Space</button>
+                <button type="submit" id="edit-space-submit-btn" class="nav-btn" style="flex: 2; padding:12px;">Save Changes</button>
+            </div>
+        </form>
+    `;
+    openSpaceActionModal(html);
+};
+
+window.submitEditSpace = async function(e, spaceId) {
+    e.preventDefault();
+    const errNode = document.getElementById('edit-space-error');
+    if (errNode) errNode.style.display = 'none';
+    
+    const nameInput = document.getElementById('edit-space-name');
+    const name = nameInput.value.trim();
+    if (!name) return;
+
+    const btn = document.getElementById('edit-space-submit-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Saving...';
+    }
+
+    try {
+        const res = await fetch(`${window.basePath}api.php?action=update_space`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ space_id: spaceId, name: name })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            toggleSpaceActionModal(null);
+            showCustomToast("Space updated successfully.");
+            fetchSpaces();
+        } else {
+            if (errNode) {
+                errNode.innerText = data.message;
+                errNode.style.display = 'block';
+            }
+        }
+    } catch (ex) {
+        console.error(ex);
+        if (errNode) {
+            errNode.innerText = "Failed to connect to server.";
+            errNode.style.display = 'block';
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Save Changes';
+        }
+    }
+};
+
+window.handleDeleteSpace = async function(spaceId) {
+    toggleSpaceActionModal(null);
+    
+    showCustomConfirm(
+        "Delete Space?",
+        "Are you sure you want to permanently delete this space? Added meetings will not be deleted from your memory.",
+        async () => {
+            try {
+                const res = await fetch(`${window.basePath}api.php?action=delete_space`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ space_id: spaceId })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showCustomToast("Space deleted successfully.");
+                    fetchSpaces();
+                } else {
+                    showCustomToast(data.message, "error");
+                }
+            } catch (e) {
+                console.error(e);
+                showCustomToast("Connection error", "error");
+            }
+        },
+        () => {
+            const spaceObj = loadedSpaces.find(s => s.id === spaceId);
+            if (spaceObj) {
+                openEditSpaceModal(spaceId, spaceObj.name);
+            }
+        }
+    );
+};
+
+window.openAddMeetingToSpaceModal = function(spaceId) {
+    const html = `
+        <div style="margin-bottom: 15px;">
+            <h3 class="type-h3-20" style="margin-bottom: 6px;">Add Meeting to Space</h3>
+            <p class="type-body-14" style="color: var(--text-secondary);">Search for recorded meetings in your Memory to add them to this space.</p>
+        </div>
+        
+        <div class="search-box-wrapper" style="max-width: 100%; margin-bottom: 15px;">
+            <i class="fa-solid fa-magnifying-glass search-box-icon" style="left:12px;"></i>
+            <input type="text" class="search-box-input" style="padding: 10px 15px 10px 35px;" placeholder="Search by title..." id="space-meeting-search-input" oninput="handleSpaceMeetingSearch(this.value, ${spaceId})">
+        </div>
+        
+        <div id="space-meeting-search-results" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
+            <!-- Render list initially -->
+        </div>
+    `;
+    openSpaceActionModal(html);
+    handleSpaceMeetingSearch('', spaceId);
+};
+
+let spaceMeetingSearchTimeout = null;
+window.handleSpaceMeetingSearch = function(query, spaceId) {
+    const resultsContainer = document.getElementById('space-meeting-search-results');
+    if (!resultsContainer) return;
+
+    resultsContainer.innerHTML = `
+        <div class="skeleton-shimmer" style="height: 55px; border-radius: 6px;"></div>
+        <div class="skeleton-shimmer" style="height: 55px; border-radius: 6px;"></div>
+        <div class="skeleton-shimmer" style="height: 55px; border-radius: 6px;"></div>
+    `;
+
+    clearTimeout(spaceMeetingSearchTimeout);
+    spaceMeetingSearchTimeout = setTimeout(async () => {
+        try {
+            const url = query
+                ? `${window.basePath}api.php?action=get_recordings&search=${encodeURIComponent(query)}`
+                : `${window.basePath}api.php?action=get_recordings`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+            const recordings = data.recordings || [];
+            const completed = recordings.filter(r => r.status === 'completed');
+
+            const currentSpace = loadedSpaces.find(s => s.id === spaceId);
+            const addedIds = currentSpace && currentSpace.recordings ? currentSpace.recordings.map(r => parseInt(r.id)) : [];
+
+            if (completed.length === 0) {
+                resultsContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.9rem;">No completed meetings found matching "${escapeHtml(query)}"</div>`;
+                return;
+            }
+
+            let html = '';
+            completed.forEach(rec => {
+                const isAlreadyAdded = addedIds.includes(parseInt(rec.id));
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-card);">
+                        <div style="min-width: 0; flex: 1; margin-right: 10px;">
+                            <h4 style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin: 0 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(rec.title)}</h4>
+                            <p style="font-size: 0.7rem; color: var(--text-muted); margin:0;">${rec.date}</p>
+                        </div>
+                        ${isAlreadyAdded 
+                            ? `<span style="font-size: 0.75rem; color: var(--color-cadet-blue); font-weight: 600; padding: 6px 12px; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-check"></i> Added</span>`
+                            : `<button class="nav-btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="confirmAddRecordingToSpace(${spaceId}, ${rec.id}, \`${escapeHtml(rec.title).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">Add</button>`
+                        }
+                    </div>
+                `;
+            });
+            resultsContainer.innerHTML = html;
+        } catch (e) {
+            console.error(e);
+            resultsContainer.innerHTML = `<div style="color: var(--color-tomato); text-align: center; padding: 20px; font-size: 0.85rem;">Failed to fetch search results.</div>`;
+        }
+    }, 400); 
+};
+
+window.confirmAddRecordingToSpace = function(spaceId, recId, title) {
+    const modal = document.getElementById('space-action-modal');
+    if (modal) modal.classList.remove('open');
+
+    showCustomConfirm(
+        "Add Meeting to Space?",
+        `Do you want to add the meeting "${title}" to this space?`,
+        async () => {
+            try {
+                const res = await fetch(`${window.basePath}api.php?action=add_recording_to_space`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ space_id: spaceId, recording_id: recId })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showCustomToast("Meeting added to space.");
+                    fetchSpaces();
+                } else {
+                    showCustomToast(data.message, "error");
+                    if (modal) modal.classList.add('open');
+                }
+            } catch (e) {
+                console.error(e);
+                showCustomToast("Connection error", "error");
+                if (modal) modal.classList.add('open');
+            }
+        },
+        {
+            confirmText: 'Add',
+            confirmBg: 'var(--color-primary)',
+            iconClass: 'fa-solid fa-folder-plus',
+            iconColor: 'var(--color-primary)',
+            iconBg: 'rgba(106, 80, 58, 0.1)'
+        },
+        () => {
+            if (modal) modal.classList.add('open');
+        }
+    );
+};
+
+window.openAddToSpacePopup = async function(recId, recTitle) {
+    const skeleton = `
+        <div style="margin-bottom: 20px;">
+            <h3 class="type-h3-20" style="margin-bottom: 6px;">Add to Space</h3>
+            <p class="type-body-14" style="color: var(--text-secondary);">Select a space to add the meeting "${escapeHtml(recTitle)}".</p>
+        </div>
+        <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
+            <div class="skeleton-shimmer" style="height: 50px; border-radius: 8px;"></div>
+            <div class="skeleton-shimmer" style="height: 50px; border-radius: 8px;"></div>
+        </div>
+    `;
+    openSpaceActionModal(skeleton);
+
+    try {
+        const res = await fetch(`${window.basePath}api.php?action=get_spaces`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            const spaces = data.spaces || [];
+            
+            if (spaces.length === 0) {
+                const emptyHtml = `
+                    <div style="margin-bottom: 20px;">
+                        <h3 class="type-h3-20" style="margin-bottom: 6px;">Add to Space</h3>
+                        <p class="type-body-14" style="color: var(--text-secondary);">Select a space to add the meeting "${escapeHtml(recTitle)}".</p>
+                    </div>
+                    <div style="text-align: center; padding: 25px 10px; color: var(--text-secondary);">
+                        <i class="fa-regular fa-folder" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px; display:block;"></i>
+                        <p style="font-size: 0.9rem; margin-bottom: 15px;">No spaces created yet.</p>
+                        <button class="nav-btn" onclick="toggleSpaceActionModal(null); navigateTo('space'); setTimeout(openCreateSpaceModal, 600);">Create a Space</button>
+                    </div>
+                `;
+                openSpaceActionModal(emptyHtml);
+                return;
+            }
+
+            let listHtml = '';
+            spaces.forEach(space => {
+                const isAlreadyAdded = space.recordings && space.recordings.some(r => parseInt(r.id) === parseInt(recId));
+                listHtml += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-card); gap: 15px;">
+                        <span style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${escapeHtml(space.name)}</span>
+                        ${isAlreadyAdded 
+                            ? `<span style="font-size: 0.8rem; color: var(--color-cadet-blue); font-weight: 600; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-check"></i> Added</span>`
+                            : `<button class="nav-btn-secondary" style="padding: 6px 12px; font-size: 0.75rem; flex-shrink: 0;" onclick="submitAddFromDetailsModal(${space.id}, ${recId}, \`${escapeHtml(recTitle).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">Add to Space</button>`
+                        }
+                    </div>
+                `;
+            });
+
+            const html = `
+                <div style="margin-bottom: 20px;">
+                    <h3 class="type-h3-20" style="margin-bottom: 6px;">Add to Space</h3>
+                    <p class="type-body-14" style="color: var(--text-secondary);">Select a space to add the meeting "${escapeHtml(recTitle)}".</p>
+                </div>
+                <div style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
+                    ${listHtml}
+                </div>
+            `;
+            openSpaceActionModal(html);
+        } else {
+            openSpaceActionModal(`<div style="color: var(--color-tomato); padding: 20px;">Failed to load spaces: ${data.message}</div>`);
+        }
+    } catch (e) {
+        console.error(e);
+        openSpaceActionModal(`<div style="color: var(--color-tomato); padding: 20px;">Error occurred while fetching spaces.</div>`);
+    }
+};
+
+window.submitAddFromDetailsModal = async function(spaceId, recId, recTitle) {
+    const spaceModal = document.getElementById('space-action-modal');
+    if (spaceModal) spaceModal.classList.remove('open');
+
+    showCustomConfirm(
+        "Confirm Add?",
+        `Do you want to add the meeting recording to this space?`,
+        async () => {
+            try {
+                const res = await fetch(`${window.basePath}api.php?action=add_recording_to_space`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ space_id: spaceId, recording_id: recId })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showCustomToast("Added to space successfully.");
+                    openAddToSpacePopup(recId, recTitle);
+                } else {
+                    showCustomToast(data.message, "error");
+                    if (spaceModal) spaceModal.classList.add('open');
+                }
+            } catch (e) {
+                console.error(e);
+                showCustomToast("Connection failed", "error");
+                if (spaceModal) spaceModal.classList.add('open');
+            }
+        },
+        {
+            confirmText: 'Add',
+            confirmBg: 'var(--color-primary)',
+            iconClass: 'fa-solid fa-folder-plus',
+            iconColor: 'var(--color-primary)',
+            iconBg: 'rgba(106, 80, 58, 0.1)'
+        },
+        () => {
+            if (spaceModal) spaceModal.classList.add('open');
+        }
+    );
+};
 
 // --- VIEW: MYTH GLOBAL CHAT ---
 function renderMyth(container) {
@@ -2462,11 +3088,11 @@ async function openRecordingDetailModal(recId) {
             };
 
             const summaryText = rec.summary
-                ? formatMarkdown(rec.summary)
+                ? formatMarkdown(rec.summary.trim())
                 : `<span style="color: var(--text-muted); font-style:italic;">No summary generated yet. Ask AI or click 'Regenerate Summary' to calculate.</span>`;
 
             const transcriptText = rec.transcript
-                ? escapeHtml(rec.transcript)
+                ? escapeHtml(rec.transcript.trim())
                 : `<span style="color: var(--text-muted); font-style:italic;">No voice transcription recorded in this session.</span>`;
 
             const html = `
@@ -2487,6 +3113,10 @@ async function openRecordingDetailModal(recId) {
                             <button onclick="openEditTitleModal(${rec.id}, \`${escapeHtml(rec.title).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)" class="download-capsule-btn">
                                 <i class="fa-solid fa-pen-to-square"></i>
                                 <span>Edit</span>
+                            </button>
+                            <button onclick="openAddToSpacePopup(${rec.id}, \`${escapeHtml(rec.title).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)" class="download-capsule-btn">
+                                <i class="fa-solid fa-folder-plus"></i>
+                                <span>Add to Space</span>
                             </button>
                         </div>
                     </div>
@@ -2510,7 +3140,7 @@ async function openRecordingDetailModal(recId) {
                                 <i class="fa-solid fa-chevron-down accordion-chevron" id="transcript-accordion-icon" style="transition: transform 0.2s; font-size: 0.95rem; color: var(--text-secondary); transform: rotate(180deg); margin-right: 5px;"></i>
                             </div>
                             <div class="transcript-content-box accordion-content" style="background: rgba(73, 55, 40, 0.01); border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; line-height: 1.6; max-height: 380px; overflow-y: auto; color: var(--text-secondary); margin-top: 12px; display: block;" id="modal-transcript-content">
-                                <div style="padding: 20px; white-space: pre-wrap;">${transcriptText}</div>
+                                <div style="padding: 12px 20px 20px 20px; white-space: pre-wrap;">${transcriptText}</div>
                             </div>
                         </div>
                     </div>
@@ -2618,6 +3248,33 @@ function toggleEditTitleModal(e) {
     }
 }
 
+window.toggleSpaceActionModal = function(e) {
+    if (e) {
+        if (e.target.id === 'space-action-modal') {
+            return;
+        }
+        e.stopPropagation();
+    }
+    const modal = document.getElementById('space-action-modal');
+    if (!modal) return;
+
+    if (modal.classList.contains('open')) {
+        modal.classList.remove('open');
+    } else {
+        modal.classList.add('open');
+    }
+};
+
+window.openSpaceActionModal = function(html) {
+    const body = document.getElementById('space-action-modal-body');
+    if (!body) return;
+    body.innerHTML = html;
+    const modal = document.getElementById('space-action-modal');
+    if (modal) {
+        modal.classList.add('open');
+    }
+};
+
 function openEditTitleModal(recId, currentTitle) {
     renderEditTitleForm(recId, currentTitle);
     const modal = document.getElementById('edit-title-modal');
@@ -2702,6 +3359,10 @@ async function submitTitleForm(event, recId) {
             const editBtn = document.querySelector('.recording-details-view button[onclick^="openEditTitleModal"]');
             if (editBtn) {
                 editBtn.setAttribute('onclick', `openEditTitleModal(${recId}, \`${escapeHtml(newTitle).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)`);
+            }
+            const addSpaceBtn = document.querySelector('.recording-details-view button[onclick^="openAddToSpacePopup"]');
+            if (addSpaceBtn) {
+                addSpaceBtn.setAttribute('onclick', `openAddToSpacePopup(${recId}, \`${escapeHtml(newTitle).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)`);
             }
 
             // Refresh underlying page data
@@ -3090,13 +3751,13 @@ async function triggerPDFDownload(event, recId, type) {
                 let formattedContentHTML = '';
                 if (type === 'summary') {
                     formattedContentHTML = formatMarkdown(contentText)
-                        .replace(/var\(--text-secondary\)/g, '#282828')
-                        .replace(/var\(--text-primary\)/g, '#282828');
+                        .replace(/var\(--text-secondary\)/g, '#333333')
+                        .replace(/var\(--text-primary\)/g, '#111111');
                 } else {
                     formattedContentHTML = contentText.split('\n')
                         .map(line => line.trim())
                         .filter(line => line !== '')
-                        .map(line => `<p style="margin-bottom: 12px; line-height: 1.6; color: #282828;">${escapeHtml(line)}</p>`)
+                        .map(line => `<p style="margin-bottom: 12px; line-height: 1.65; color: #333333;">${escapeHtml(line)}</p>`)
                         .join('');
                 }
 
@@ -3104,28 +3765,31 @@ async function triggerPDFDownload(event, recId, type) {
                 const printContainer = document.createElement('div');
                 printContainer.id = 'mythbrain-print-section';
                 printContainer.innerHTML = `
-                    <div style="max-width: 800px; margin: 0 auto; background: #fff; padding: 20px; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                    <div style="max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; box-sizing: border-box; font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111111;">
                         <!-- Header -->
-                        <div style="border-bottom: 2px solid #E8DFD0; padding-bottom: 12px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: flex-end;">
+                        <div style="border-bottom: 2px solid #E8DFD0; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end;">
                             <div>
-                                <div style="font-size: 26px; font-weight: 700; color: #493728; font-family: serif;">MythBrain AI</div>
-                                <div style="font-size: 11px; color: #787878; text-transform: uppercase; letter-spacing: 1px;">AI-Powered Meeting Recorder & Intelligence</div>
+                                <div style="font-size: 28px; font-weight: 700; color: #493728; font-family: 'Cormorant Garamond', Georgia, serif; line-height: 1.1;">MythBrain AI</div>
+                                <div style="font-size: 10px; color: #888888; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Instrument Sans', sans-serif; margin-top: 4px;">AI-Powered Meeting Recorder & Intelligence</div>
+                            </div>
+                            <div style="font-size: 11px; color: #888888; font-family: 'Instrument Sans', sans-serif; text-align: right;">
+                                Generated via MythBrain
                             </div>
                         </div>
                         
                         <!-- Meeting Details -->
-                        <h1 style="font-size: 24px; font-weight: 700; color: #282828; margin: 0 0 8px 0; line-height: 1.2; font-family: serif;">${escapeHtml(title)}</h1>
-                        <div style="font-size: 12px; color: #646464; margin-bottom: 25px; border-bottom: 1px solid #FAF6F0; padding-bottom: 12px;">
-                            <strong>Date:</strong> ${escapeHtml(date)} &nbsp;&bull;&nbsp; 
-                            <strong>Time:</strong> ${escapeHtml(time)} &nbsp;&bull;&nbsp; 
-                            <strong>Duration:</strong> ${escapeHtml(duration)}
+                        <h1 style="font-size: 26px; font-weight: 700; color: #111111; margin: 0 0 10px 0; line-height: 1.25; font-family: 'Cormorant Garamond', Georgia, serif;">${escapeHtml(title)}</h1>
+                        <div style="font-size: 12px; color: #666666; margin-bottom: 30px; border-bottom: 1px solid #FAF6F0; padding-bottom: 15px; font-family: 'Instrument Sans', sans-serif; display: flex; gap: 20px; flex-wrap: wrap;">
+                            <span><strong>Date:</strong> ${escapeHtml(date)}</span>
+                            <span><strong>Time:</strong> ${escapeHtml(time)}</span>
+                            <span><strong>Duration:</strong> ${escapeHtml(duration)}</span>
                         </div>
                         
                         <!-- Type -->
-                        <h2 style="font-size: 16px; font-weight: 700; color: #493728; border-bottom: 1px solid #FAF6F0; padding-bottom: 6px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHtml(headingText)}</h2>
+                        <h2 style="font-size: 15px; font-weight: 700; color: #493728; border-bottom: 1px solid #E8DFD0; padding-bottom: 8px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Instrument Sans', sans-serif;">${escapeHtml(headingText)}</h2>
                         
                         <!-- Content -->
-                        <div style="font-size: 14px; color: #282828; line-height: 1.6;">
+                        <div style="font-size: 14.5px; color: #333333; line-height: 1.65; font-family: 'Instrument Sans', sans-serif;">
                             ${formattedContentHTML}
                         </div>
                     </div>
@@ -3150,6 +3814,12 @@ async function triggerPDFDownload(event, recId, type) {
                             background: #fff !important;
                             padding: 0 !important;
                             margin: 0 !important;
+                        }
+                        p, li, h1, h2, h3, h4, ul {
+                            page-break-inside: avoid;
+                        }
+                        @page {
+                            margin: 15mm 20mm;
                         }
                     }
                     @media screen {
@@ -3245,7 +3915,22 @@ async function triggerPDFDownload(event, recId, type) {
                 .replace(/[\u201C\u201D]/g, '"') // replace curly double quotes
                 .replace(/[\u2013\u2014]/g, '-') // replace en/em dashes
                 .replace(/\u2026/g, '...'); // replace ellipses
-            const rawLines = cleanText.split('\n');
+            
+            // Split by newline, trim each line, and collapse consecutive empty lines
+            const rawLines = [];
+            let lastWasEmpty = false;
+            cleanText.split('\n').forEach(l => {
+                const trimmed = l.trim();
+                if (trimmed === '') {
+                    if (!lastWasEmpty) {
+                        rawLines.push('');
+                        lastWasEmpty = true;
+                    }
+                } else {
+                    rawLines.push(trimmed);
+                    lastWasEmpty = false;
+                }
+            });
 
             const checkPageOverflow = (heightNeeded) => {
                 if (y + heightNeeded > pageHeight - margin) {
@@ -3263,8 +3948,9 @@ async function triggerPDFDownload(event, recId, type) {
             };
 
             for (let i = 0; i < rawLines.length; i++) {
-                let line = rawLines[i].trim();
+                let line = rawLines[i];
                 if (line === '') {
+                    checkPageOverflow(4);
                     y += 4; // Spacing for empty line
                     continue;
                 }
@@ -3291,17 +3977,17 @@ async function triggerPDFDownload(event, recId, type) {
                     // Wrap text for bullets with indented width
                     const wrappedBullet = doc.splitTextToSize(bulletText, contentWidth - 8);
                     
-                    checkPageOverflow(wrappedBullet.length * 5.5 + 4);
-                    
                     doc.setFont('Helvetica', 'normal');
                     doc.setFontSize(10);
                     doc.setTextColor(60, 60, 60);
                     
-                    // Draw bullet symbol
-                    doc.text('•', margin + 2, y);
-                    
-                    // Draw wrapped bullet lines
+                    // Draw wrapped bullet lines line-by-line
                     for (let j = 0; j < wrappedBullet.length; j++) {
+                        checkPageOverflow(5.5);
+                        if (j === 0) {
+                            // Draw bullet symbol
+                            doc.text('•', margin + 2, y);
+                        }
                         doc.text(wrappedBullet[j], margin + 8, y);
                         y += 5.5;
                     }
@@ -3311,13 +3997,12 @@ async function triggerPDFDownload(event, recId, type) {
                     const paragraphText = line.replace(/\*\*/g, '');
                     const wrappedParagraph = doc.splitTextToSize(paragraphText, contentWidth);
                     
-                    checkPageOverflow(wrappedParagraph.length * 5.5 + 4);
-                    
                     doc.setFont('Helvetica', 'normal');
                     doc.setFontSize(10);
                     doc.setTextColor(60, 60, 60);
                     
                     for (let j = 0; j < wrappedParagraph.length; j++) {
+                        checkPageOverflow(5.5);
                         doc.text(wrappedParagraph[j], margin, y);
                         y += 5.5;
                     }
@@ -3346,7 +4031,12 @@ async function triggerPDFDownload(event, recId, type) {
 }
 
 // Custom confirmation overlay
-function showCustomConfirm(title, message, onConfirm, options = {}) {
+function showCustomConfirm(title, message, onConfirm, options = {}, onCancel = null) {
+    if (typeof options === 'function') {
+        onCancel = options;
+        options = {};
+    }
+
     const confirmText = options.confirmText || 'Delete';
     const confirmBg = options.confirmBg || '#dc3545';
     const iconClass = options.iconClass || 'fa-solid fa-trash-can';
@@ -3408,6 +4098,8 @@ function showCustomConfirm(title, message, onConfirm, options = {}) {
             overlay.remove();
             if (approved) {
                 onConfirm();
+            } else if (onCancel) {
+                onCancel();
             }
         }, 200);
     };

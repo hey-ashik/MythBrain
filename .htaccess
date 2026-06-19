@@ -13,7 +13,7 @@
     RewriteRule ^ - [L]
 
     # Rewrite known SPA routes to index.php (SPA container)
-    RewriteRule ^(home|login|register|forgot|dashboard|memory|assistant|settings)/?$ index.php [QSA,L]
+    RewriteRule ^(home|login|register|forgot|dashboard|memory|space|assistant|settings)/?$ index.php [QSA,L]
 
     # Empty path redirects to index.php (Home)
     RewriteRule ^$ index.php [L]

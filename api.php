@@ -792,6 +792,168 @@ switch ($action) {
         returnSuccess(['response' => $reply]);
         break;
 
+    // ==========================================
+    // SPACES ENDPOINTS
+    // ==========================================
+
+    case 'get_spaces':
+        $user = checkAuth();
+        // Fetch all spaces for this user
+        $stmt = $db->prepare("SELECT * FROM spaces WHERE user_id = ? ORDER BY id DESC");
+        $stmt->execute([$user['id']]);
+        $spaces = $stmt->fetchAll();
+
+        foreach ($spaces as &$space) {
+            // Fetch recordings in this space
+            $stmtRecs = $db->prepare("
+                SELECT r.id, r.title, r.date, r.start_time, r.end_time, r.status
+                FROM recordings r
+                JOIN space_recordings sr ON r.id = sr.recording_id
+                WHERE sr.space_id = ?
+                ORDER BY sr.created_at DESC
+            ");
+            $stmtRecs->execute([$space['id']]);
+            $recs = $stmtRecs->fetchAll();
+
+            foreach ($recs as &$rec) {
+                $rec['start_time_formatted'] = date('h:i A', strtotime($rec['start_time']));
+                $rec['date_formatted'] = date('d F, Y', strtotime($rec['date']));
+                if ($rec['end_time']) {
+                    $rec['duration_minutes'] = round((strtotime($rec['end_time']) - strtotime($rec['start_time'])) / 60, 1);
+                } else {
+                    $rec['duration_minutes'] = 0;
+                }
+            }
+
+            $space['recordings'] = $recs;
+        }
+
+        returnSuccess(['spaces' => $spaces]);
+        break;
+
+    case 'create_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $name = trim($data['name'] ?? '');
+
+        if (empty($name)) {
+            returnError('Space name cannot be empty.');
+        }
+
+        // Check if a space with this name already exists for this user
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE user_id = ? AND name = ?");
+        $stmt->execute([$user['id'], $name]);
+        if ($stmt->fetch()) {
+            returnError('A space with this name already exists.');
+        }
+
+        $stmt = $db->prepare("INSERT INTO spaces (user_id, name) VALUES (?, ?)");
+        $stmt->execute([$user['id'], $name]);
+        $spaceId = $db->lastInsertId();
+
+        returnSuccess(['message' => 'Space created successfully.', 'space_id' => $spaceId]);
+        break;
+
+    case 'update_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+        $name = trim($data['name'] ?? '');
+
+        if (empty($name)) {
+            returnError('Space name cannot be empty.');
+        }
+
+        // Verify ownership
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+
+        // Check uniqueness for other spaces of this user
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE user_id = ? AND name = ? AND id != ?");
+        $stmt->execute([$user['id'], $name, $spaceId]);
+        if ($stmt->fetch()) {
+            returnError('Another space with this name already exists.');
+        }
+
+        $stmt = $db->prepare("UPDATE spaces SET name = ? WHERE id = ?");
+        $stmt->execute([$name, $spaceId]);
+
+        returnSuccess(['message' => 'Space updated successfully.']);
+        break;
+
+    case 'delete_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+
+        // Verify ownership
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+
+        $stmt = $db->prepare("DELETE FROM spaces WHERE id = ?");
+        $stmt->execute([$spaceId]);
+
+        returnSuccess(['message' => 'Space deleted successfully.']);
+        break;
+
+    case 'add_recording_to_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+        $recId = (int)($data['recording_id'] ?? 0);
+
+        // Verify space ownership
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+
+        // Verify recording ownership
+        $stmt = $db->prepare("SELECT id FROM recordings WHERE id = ? AND user_id = ?");
+        $stmt->execute([$recId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Recording not found or unauthorized.');
+        }
+
+        // Insert link
+        try {
+            $stmt = $db->prepare("INSERT INTO space_recordings (space_id, recording_id) VALUES (?, ?)");
+            $stmt->execute([$spaceId, $recId]);
+            returnSuccess(['message' => 'Recording added to space.']);
+        } catch (PDOException $e) {
+            if ($e->getCode() == 23000) {
+                returnError('Recording is already added to this space.');
+            }
+            returnError('Failed to add recording: ' . $e->getMessage());
+        }
+        break;
+
+    case 'remove_recording_from_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+        $recId = (int)($data['recording_id'] ?? 0);
+
+        // Verify space ownership
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+
+        $stmt = $db->prepare("DELETE FROM space_recordings WHERE space_id = ? AND recording_id = ?");
+        $stmt->execute([$spaceId, $recId]);
+
+        returnSuccess(['message' => 'Recording removed from space successfully.']);
+        break;
+
     case 'regenerate_summary':
         $user = checkAuth();
         $data = getRequestData();
@@ -1087,6 +1249,141 @@ switch ($action) {
         }
         
         returnSuccess(['message' => 'Recording marked as completed successfully.']);
+        break;
+
+    // ==========================================
+    // SPACES ENDPOINTS
+    // ==========================================
+    
+    case 'get_spaces':
+        $user = checkAuth();
+        $stmt = $db->prepare("SELECT * FROM spaces WHERE user_id = ? ORDER BY id DESC");
+        $stmt->execute([$user['id']]);
+        $spaces = $stmt->fetchAll();
+        
+        $result = [];
+        foreach ($spaces as $space) {
+            $stmtRecs = $db->prepare("
+                SELECT r.id, r.title, r.date, r.start_time, r.end_time, r.status, r.word_count, r.duration_minutes
+                FROM space_recordings sr
+                JOIN recordings r ON sr.recording_id = r.id
+                WHERE sr.space_id = ?
+                ORDER BY sr.created_at DESC
+            ");
+            $stmtRecs->execute([$space['id']]);
+            $recs = $stmtRecs->fetchAll();
+            
+            foreach ($recs as &$rec) {
+                $rec['date_formatted'] = date('M d, Y', strtotime($rec['date']));
+                $rec['start_time_formatted'] = date('h:i A', strtotime($rec['start_time']));
+            }
+            
+            $space['recordings'] = $recs;
+            $result[] = $space;
+        }
+        returnSuccess(['spaces' => $result]);
+        break;
+        
+    case 'create_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $name = trim($data['name'] ?? '');
+        if (empty($name)) {
+            returnError('Space name cannot be empty.');
+        }
+        
+        $stmt = $db->prepare("INSERT INTO spaces (user_id, name) VALUES (?, ?)");
+        $stmt->execute([$user['id'], $name]);
+        $spaceId = $db->lastInsertId();
+        
+        returnSuccess(['message' => 'Space created successfully.', 'space_id' => $spaceId]);
+        break;
+        
+    case 'update_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+        $name = trim($data['name'] ?? '');
+        
+        if (empty($name)) {
+            returnError('Space name cannot be empty.');
+        }
+        
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+        
+        $stmtUpdate = $db->prepare("UPDATE spaces SET name = ? WHERE id = ?");
+        $stmtUpdate->execute([$name, $spaceId]);
+        
+        returnSuccess(['message' => 'Space updated successfully.']);
+        break;
+        
+    case 'delete_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+        
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+        
+        $stmtDelete = $db->prepare("DELETE FROM spaces WHERE id = ?");
+        $stmtDelete->execute([$spaceId]);
+        
+        returnSuccess(['message' => 'Space deleted successfully.']);
+        break;
+        
+    case 'add_recording_to_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+        $recId = (int)($data['recording_id'] ?? 0);
+        
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+        
+        $stmtRec = $db->prepare("SELECT id FROM recordings WHERE id = ? AND user_id = ?");
+        $stmtRec->execute([$recId, $user['id']]);
+        if (!$stmtRec->fetch()) {
+            returnError('Recording not found or unauthorized.');
+        }
+        
+        $stmtCheck = $db->prepare("SELECT id FROM space_recordings WHERE space_id = ? AND recording_id = ?");
+        $stmtCheck->execute([$spaceId, $recId]);
+        if ($stmtCheck->fetch()) {
+            returnSuccess(['message' => 'Recording already in space.']);
+        }
+        
+        $stmtAdd = $db->prepare("INSERT INTO space_recordings (space_id, recording_id) VALUES (?, ?)");
+        $stmtAdd->execute([$spaceId, $recId]);
+        
+        returnSuccess(['message' => 'Recording added to space successfully.']);
+        break;
+        
+    case 'remove_recording_from_space':
+        $user = checkAuth();
+        $data = getRequestData();
+        $spaceId = (int)($data['space_id'] ?? 0);
+        $recId = (int)($data['recording_id'] ?? 0);
+        
+        $stmt = $db->prepare("SELECT id FROM spaces WHERE id = ? AND user_id = ?");
+        $stmt->execute([$spaceId, $user['id']]);
+        if (!$stmt->fetch()) {
+            returnError('Space not found or unauthorized.');
+        }
+        
+        $stmtRemove = $db->prepare("DELETE FROM space_recordings WHERE space_id = ? AND recording_id = ?");
+        $stmtRemove->execute([$spaceId, $recId]);
+        
+        returnSuccess(['message' => 'Recording removed from space successfully.']);
         break;
 
     default:

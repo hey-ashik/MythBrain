@@ -31,7 +31,7 @@ require_once __DIR__ . '/db.php';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="<?php echo htmlspecialchars($baseDir); ?>assets/css/style.css?v=7.8.2">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($baseDir); ?>assets/css/style.css?v=7.9.2">
 </head>
 
 <body>
@@ -135,6 +135,8 @@ require_once __DIR__ . '/db.php';
                                 onclick="navigateTo('dashboard');return false;">Dashboard</a></li>
                         <li><a href="<?php echo htmlspecialchars($baseDir); ?>memory"
                                 onclick="navigateTo('memory');return false;">Memory</a></li>
+                        <li><a href="<?php echo htmlspecialchars($baseDir); ?>space"
+                                onclick="navigateTo('space');return false;">Space</a></li>
                         <li><a href="<?php echo htmlspecialchars($baseDir); ?>assistant"
                                 onclick="navigateTo('assistant');return false;">Assistant</a></li>
                     </ul>
@@ -202,12 +204,24 @@ require_once __DIR__ . '/db.php';
         </div>
     </div>
 
+    <!-- Space Action Modal (Slide Up for Small Screen, normal box for Big Screen) -->
+    <div class="modal-overlay" id="space-action-modal" onclick="toggleSpaceActionModal(event)">
+        <div class="modal-content auth-drawer-content" onclick="event.stopPropagation()">
+            <!-- Mobile pull-down indicator pill -->
+            <div class="mobile-drawer-handle"></div>
+            <button class="modal-close" onclick="toggleSpaceActionModal(null)">&times;</button>
+            <div id="space-action-modal-body">
+                <!-- Dynamically injected space forms -->
+            </div>
+        </div>
+    </div>
+
     <!-- SPA Application Engine Scripts -->
     <script>
         window.basePath = '<?php echo htmlspecialchars($baseDir); ?>';
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="<?php echo htmlspecialchars($baseDir); ?>assets/js/app.js?v=7.8.2"></script>
+    <script src="<?php echo htmlspecialchars($baseDir); ?>assets/js/app.js?v=7.9.2"></script>
 </body>
 
 </html>

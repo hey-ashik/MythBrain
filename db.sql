@@ -100,3 +100,21 @@ INSERT IGNORE INTO `devices` (`token`, `wifi_1_ssid`, `wifi_1_password`) VALUES
 INSERT IGNORE INTO `site_settings` (`setting_key`, `setting_value`) VALUES 
 ('admin_maintenance', '0'),
 ('admin_maintenance_until', NULL);
+
+CREATE TABLE IF NOT EXISTS `spaces` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NOT NULL,
+    `name` VARCHAR(255) NOT NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `space_recordings` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `space_id` INT NOT NULL,
+    `recording_id` INT NOT NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_space_rec` (`space_id`, `recording_id`),
+    FOREIGN KEY (`space_id`) REFERENCES `spaces` (`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`recording_id`) REFERENCES `recordings` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
