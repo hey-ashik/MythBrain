@@ -1100,6 +1100,7 @@ select {
     0% {
         background-position: 100% 50%;
     }
+
     100% {
         background-position: 0% 50%;
     }
@@ -1331,7 +1332,7 @@ select {
 }
 
 .chat-message {
-    max-width: 75%;
+    max-width: 97%;
     padding: 12px 18px;
     border-radius: var(--radius-md);
     line-height: 1.5;
@@ -1603,6 +1604,7 @@ select {
 
 /* Facebook Bottom-to-Top Slide-up Auth Drawer on Mobile */
 @media (max-width: 768px) {
+
     .modal-overlay#auth-modal,
     .modal-overlay#edit-title-modal {
         align-items: flex-end;
@@ -2080,7 +2082,8 @@ select {
         /* Open more than half of the screen */
         border-radius: 24px 24px 0 0 !important;
         margin: 0 !important;
-        padding: 24px 20px 40px !important;
+        /*padding: 24px 20px 40px !important;*/
+        padding: 15px 8px 8px !important;
         box-shadow: 0 -10px 30px rgba(73, 55, 40, 0.15) !important;
         transform: translateY(100%) !important;
         transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
@@ -2115,13 +2118,17 @@ select {
         gap: 15px !important;
     }
 
-    /* AI Summary section on mobile - Share height equally */
+    /* AI Summary section on mobile - Share height dynamically based on open state */
     .modal-overlay#global-modal .summary-section-wrapper {
-        flex: 1 !important;
+        flex: 0 0 auto !important;
         display: flex !important;
         flex-direction: column !important;
         min-height: 0 !important;
         margin-bottom: 15px !important;
+    }
+
+    .modal-overlay#global-modal .summary-section-wrapper.open-section {
+        flex: 1 !important;
     }
 
     .modal-overlay#global-modal #modal-summary-content {
@@ -2130,12 +2137,16 @@ select {
         min-height: 0 !important;
     }
 
-    /* Full Text Transcript section on mobile - Share height equally */
+    /* Full Text Transcript section on mobile - Share height dynamically based on open state */
     .modal-overlay#global-modal .transcript-section-wrapper {
-        flex: 1 !important;
+        flex: 0 0 auto !important;
         display: flex !important;
         flex-direction: column !important;
         min-height: 0 !important;
+    }
+
+    .modal-overlay#global-modal .transcript-section-wrapper.open-section {
+        flex: 1 !important;
     }
 
     .modal-overlay#global-modal .transcript-content-box {
@@ -2419,12 +2430,12 @@ select {
         gap: 24px;
         align-items: stretch;
     }
-    
+
     #modal-summary-content {
         max-height: 380px !important;
         height: 380px;
     }
-    
+
     .recording-details-view .transcript-content-box {
         max-height: 380px !important;
         height: 380px;
@@ -2544,6 +2555,7 @@ select {
         transform: translate(-50%, -20px);
         opacity: 0;
     }
+
     to {
         transform: translate(-50%, 0);
         opacity: 1;
@@ -2561,7 +2573,7 @@ select {
         gap: 10px;
         font-size: 0.85rem;
     }
-    
+
     .banner-message-wrapper {
         gap: 8px;
     }

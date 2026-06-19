@@ -31,7 +31,7 @@ require_once __DIR__ . '/db.php';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="<?php echo htmlspecialchars($baseDir); ?>assets/css/style.css?v=7.4.8">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($baseDir); ?>assets/css/style.css?v=7.8.2">
 </head>
 
 <body>
@@ -207,7 +207,7 @@ require_once __DIR__ . '/db.php';
         window.basePath = '<?php echo htmlspecialchars($baseDir); ?>';
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="<?php echo htmlspecialchars($baseDir); ?>assets/js/app.js?v=7.4.8"></script>
+    <script src="<?php echo htmlspecialchars($baseDir); ?>assets/js/app.js?v=7.8.2"></script>
 </body>
 
 </html>

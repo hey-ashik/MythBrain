@@ -28,6 +28,96 @@ window.updateTemperatureLabel = function(val) {
     }
 };
 
+window.updateMaxTokensLabel = function(val) {
+    const values = [128, 512, 1024, 2048];
+    const numericVal = values[parseInt(val)] || 1024;
+    const label = document.getElementById('max-tokens-val');
+    if (label) {
+        label.innerText = numericVal;
+    }
+    const descEl = document.getElementById('max-tokens-desc');
+    if (descEl) {
+        let desc = "";
+        if (numericVal === 128) {
+            desc = "<strong>Max Response Size = 128 Tokens (Approx. 96 words)</strong><br>Optimized for brief replies, short chats, and conserving API tokens.";
+        } else if (numericVal === 512) {
+            desc = "<strong>Max Response Size = 512 Tokens (Approx. 384 words)</strong><br>Moderate length replies. Suitable for most regular conversational interactions.";
+        } else if (numericVal === 1024) {
+            desc = "<strong>Max Response Size = 1024 Tokens (Approx. 768 words)</strong><br>Detailed responses, good for longer explanations.";
+        } else if (numericVal === 2048) {
+            desc = "<strong>Max Response Size = 2048 Tokens (Approx. 1536 words)</strong><br>Maximum output token length. Ideal for deep analysis, essays, and maximum text generation.";
+        }
+        descEl.innerHTML = desc;
+    }
+};
+
+window.updateSummaryTokensLabel = function(val) {
+    const values = [64, 128, 512];
+    const numericVal = values[parseInt(val)] || 128;
+    const label = document.getElementById('summary-tokens-val');
+    if (label) {
+        label.innerText = numericVal;
+    }
+    const descEl = document.getElementById('summary-tokens-desc');
+    if (descEl) {
+        let desc = "";
+        if (numericVal === 64) {
+            desc = "<strong>AI Summary = 64 Tokens (Approx. 48 words)</strong><br>Concise and brief summary highlighting the key points.";
+        } else if (numericVal === 128) {
+            desc = "<strong>AI Summary = 128 Tokens (Approx. 96 words)</strong><br>Balanced summary layout. Suitable for quick meetings.";
+        } else if (numericVal === 512) {
+            desc = "<strong>AI Summary = 512 Tokens (Approx. 384 words)</strong><br>Detailed summary including comprehensive action points.";
+        }
+        descEl.innerHTML = desc;
+    }
+};
+
+window.updateMeetingChatTokensLabel = function(val) {
+    const values = [128, 512, 1024, 2048];
+    const numericVal = values[parseInt(val)] || 128;
+    const label = document.getElementById('meeting-chat-tokens-val');
+    if (label) {
+        label.innerText = numericVal;
+    }
+    const descEl = document.getElementById('meeting-chat-tokens-desc');
+    if (descEl) {
+        let desc = "";
+        if (numericVal === 128) {
+            desc = "<strong>Meeting Chat = 128 Tokens (Approx. 96 words)</strong><br>Short responses when querying single meeting details.";
+        } else if (numericVal === 512) {
+            desc = "<strong>Meeting Chat = 512 Tokens (Approx. 384 words)</strong><br>Standard chat length. Good for most questions about meetings.";
+        } else if (numericVal === 1024) {
+            desc = "<strong>Meeting Chat = 1024 Tokens (Approx. 768 words)</strong><br>Detailed answers with rich explanations from the transcript.";
+        } else if (numericVal === 2048) {
+            desc = "<strong>Meeting Chat = 2048 Tokens (Approx. 1536 words)</strong><br>Long detailed responses, ideal for extensive questions.";
+        }
+        descEl.innerHTML = desc;
+    }
+};
+
+window.updateAssistantChatTokensLabel = function(val) {
+    const values = [128, 512, 1024, 2048];
+    const numericVal = values[parseInt(val)] || 512;
+    const label = document.getElementById('assistant-chat-tokens-val');
+    if (label) {
+        label.innerText = numericVal;
+    }
+    const descEl = document.getElementById('assistant-chat-tokens-desc');
+    if (descEl) {
+        let desc = "";
+        if (numericVal === 128) {
+            desc = "<strong>Assistant Chat = 128 Tokens (Approx. 96 words)</strong><br>Short universal responses to save context window tokens.";
+        } else if (numericVal === 512) {
+            desc = "<strong>Assistant Chat = 512 Tokens (Approx. 384 words)</strong><br>Standard ChatGPT style replies, balanced length and detail.";
+        } else if (numericVal === 1024) {
+            desc = "<strong>Assistant Chat = 1024 Tokens (Approx. 768 words)</strong><br>Long detailed analytical reasoning across multiple meetings.";
+        } else if (numericVal === 2048) {
+            desc = "<strong>Assistant Chat = 2048 Tokens (Approx. 1536 words)</strong><br>Maximum depth answers, perfect for comprehensive synthesis.";
+        }
+        descEl.innerHTML = desc;
+    }
+};
+
 // Global State
 const state = {
     authenticated: false,
@@ -1536,9 +1626,32 @@ async function renderSettings(container) {
                                     <option value="gemma2-9b-it">gemma2-9b-it</option>
                                 </select>
                             </div>
+                            
                             <div class="form-group">
-                                <label class="form-label">Max Response Size (Completion Tokens)</label>
-                                <input type="number" class="form-control" id="settings-max-tokens" placeholder="e.g. 1024">
+                                <label class="form-label">AI Summary (Completion Tokens)</label>
+                                <div style="display: flex; align-items: center; gap: 12px; background: rgba(73, 55, 40, 0.02); padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 6px;">
+                                    <input type="range" id="settings-summary-tokens" min="0" max="2" step="1" style="flex: 1; accent-color: var(--color-primary); cursor: pointer; height: 6px; -webkit-appearance: none; background: var(--border-color); border-radius: 3px; outline: none;" oninput="window.updateSummaryTokensLabel(this.value)">
+                                    <span id="summary-tokens-val" style="font-weight: 700; width: 45px; text-align: right; color: var(--text-primary); font-size: 0.95rem;">128</span>
+                                </div>
+                                <p id="summary-tokens-desc" style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0; min-height: 32px; transition: color 0.2s ease;"></p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Meeting Chat (Completion Tokens)</label>
+                                <div style="display: flex; align-items: center; gap: 12px; background: rgba(73, 55, 40, 0.02); padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 6px;">
+                                    <input type="range" id="settings-meeting-chat-tokens" min="0" max="3" step="1" style="flex: 1; accent-color: var(--color-primary); cursor: pointer; height: 6px; -webkit-appearance: none; background: var(--border-color); border-radius: 3px; outline: none;" oninput="window.updateMeetingChatTokensLabel(this.value)">
+                                    <span id="meeting-chat-tokens-val" style="font-weight: 700; width: 45px; text-align: right; color: var(--text-primary); font-size: 0.95rem;">128</span>
+                                </div>
+                                <p id="meeting-chat-tokens-desc" style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0; min-height: 32px; transition: color 0.2s ease;"></p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Assistant Chat (Completion Tokens)</label>
+                                <div style="display: flex; align-items: center; gap: 12px; background: rgba(73, 55, 40, 0.02); padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 6px;">
+                                    <input type="range" id="settings-assistant-chat-tokens" min="0" max="3" step="1" style="flex: 1; accent-color: var(--color-primary); cursor: pointer; height: 6px; -webkit-appearance: none; background: var(--border-color); border-radius: 3px; outline: none;" oninput="window.updateAssistantChatTokensLabel(this.value)">
+                                    <span id="assistant-chat-tokens-val" style="font-weight: 700; width: 45px; text-align: right; color: var(--text-primary); font-size: 0.95rem;">512</span>
+                                </div>
+                                <p id="assistant-chat-tokens-desc" style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0; min-height: 32px; transition: color 0.2s ease;"></p>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">AI Chat Temperature</label>
@@ -1659,7 +1772,22 @@ async function loadSettingsData() {
             document.getElementById('settings-dg-key').value = set.deepgram_api_key || '';
             document.getElementById('settings-groq-key').value = set.groq_api_key || '';
             document.getElementById('settings-groq-model').value = set.groq_model || 'openai/gpt-oss-120b';
-            document.getElementById('settings-max-tokens').value = set.max_response_tokens || 1024;
+            
+            const summaryTokensVal = set.summary_tokens !== undefined ? parseInt(set.summary_tokens) : 128;
+            const summaryTokensIdx = [64, 128, 512].indexOf(summaryTokensVal);
+            document.getElementById('settings-summary-tokens').value = summaryTokensIdx !== -1 ? summaryTokensIdx : 1;
+            if (window.updateSummaryTokensLabel) window.updateSummaryTokensLabel(summaryTokensIdx !== -1 ? summaryTokensIdx : 1);
+
+            const meetingChatTokensVal = set.meeting_chat_tokens !== undefined ? parseInt(set.meeting_chat_tokens) : 128;
+            const meetingChatTokensIdx = [128, 512, 1024, 2048].indexOf(meetingChatTokensVal);
+            document.getElementById('settings-meeting-chat-tokens').value = meetingChatTokensIdx !== -1 ? meetingChatTokensIdx : 0;
+            if (window.updateMeetingChatTokensLabel) window.updateMeetingChatTokensLabel(meetingChatTokensIdx !== -1 ? meetingChatTokensIdx : 0);
+
+            const assistantChatTokensVal = set.assistant_chat_tokens !== undefined ? parseInt(set.assistant_chat_tokens) : 512;
+            const assistantChatTokensIdx = [128, 512, 1024, 2048].indexOf(assistantChatTokensVal);
+            document.getElementById('settings-assistant-chat-tokens').value = assistantChatTokensIdx !== -1 ? assistantChatTokensIdx : 1;
+            if (window.updateAssistantChatTokensLabel) window.updateAssistantChatTokensLabel(assistantChatTokensIdx !== -1 ? assistantChatTokensIdx : 1);
+
             document.getElementById('settings-transcription-lang').value = set.transcription_language || 'bn';
 
             const tempVal = set.temperature !== undefined ? parseFloat(set.temperature) : 0.7;
@@ -1855,13 +1983,25 @@ async function handleApiKeysSave(e) {
         btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Updating...';
     }
 
+    const summaryTokensIdx = parseInt(document.getElementById('settings-summary-tokens').value);
+    const summaryTokens = [64, 128, 512][summaryTokensIdx] || 128;
+
+    const meetingChatTokensIdx = parseInt(document.getElementById('settings-meeting-chat-tokens').value);
+    const meetingChatTokens = [128, 512, 1024, 2048][meetingChatTokensIdx] || 128;
+
+    const assistantChatTokensIdx = parseInt(document.getElementById('settings-assistant-chat-tokens').value);
+    const assistantChatTokens = [128, 512, 1024, 2048][assistantChatTokensIdx] || 512;
+
     const payload = {
         deepgram_api_key: document.getElementById('settings-dg-key').value,
         groq_api_key: document.getElementById('settings-groq-key').value,
         groq_model: document.getElementById('settings-groq-model').value,
-        max_response_tokens: parseInt(document.getElementById('settings-max-tokens').value) || 1024,
+        max_response_tokens: 1024,
         temperature: parseFloat(document.getElementById('settings-temperature').value),
-        transcription_language: document.getElementById('settings-transcription-lang').value
+        transcription_language: document.getElementById('settings-transcription-lang').value,
+        summary_tokens: summaryTokens,
+        meeting_chat_tokens: meetingChatTokens,
+        assistant_chat_tokens: assistantChatTokens
     };
 
     try {
@@ -2364,13 +2504,13 @@ async function openRecordingDetailModal(recId) {
                             </div>
                         </div>
                         
-                        <div class="transcript-section-wrapper" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px; background: var(--bg-card);">
+                        <div class="transcript-section-wrapper open-section" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px; background: var(--bg-card);">
                             <div class="accordion-header" style="display:flex; justify-content:space-between; align-items:center; cursor: pointer;" onclick="toggleAccordionSection('transcript', ${rec.id})">
                                 <h4 class="type-heading-16" style="font-weight: 700; display: flex; align-items: center; gap: 8px; font-size: 1.1rem; margin:0; color: var(--text-primary);"><i class="fa-solid fa-align-left"></i> Full Text Transcript</h4>
                                 <i class="fa-solid fa-chevron-down accordion-chevron" id="transcript-accordion-icon" style="transition: transform 0.2s; font-size: 0.95rem; color: var(--text-secondary); transform: rotate(180deg); margin-right: 5px;"></i>
                             </div>
-                            <div class="transcript-content-box accordion-content" style="background: rgba(73, 55, 40, 0.01); border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; line-height: 1.6; max-height: 380px; overflow-y: auto; white-space: pre-wrap; color: var(--text-secondary); margin-top: 12px; display: block;" id="modal-transcript-content">
-                                <div style="padding: 20px;">${transcriptText}</div>
+                            <div class="transcript-content-box accordion-content" style="background: rgba(73, 55, 40, 0.01); border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; line-height: 1.6; max-height: 380px; overflow-y: auto; color: var(--text-secondary); margin-top: 12px; display: block;" id="modal-transcript-content">
+                                <div style="padding: 20px; white-space: pre-wrap;">${transcriptText}</div>
                             </div>
                         </div>
                     </div>
@@ -2397,22 +2537,28 @@ window.toggleAccordionSection = function(sectionType, recId) {
     const transcriptContent = document.getElementById('modal-transcript-content');
     const summaryIcon = document.getElementById('summary-accordion-icon');
     const transcriptIcon = document.getElementById('transcript-accordion-icon');
+    const summaryWrapper = document.querySelector('.summary-section-wrapper');
+    const transcriptWrapper = document.querySelector('.transcript-section-wrapper');
 
     if (sectionType === 'summary') {
         const isCurrentlyOpen = summaryContent.style.display !== 'none';
         if (isCurrentlyOpen) {
             summaryContent.style.display = 'none';
             if (summaryIcon) summaryIcon.style.transform = 'rotate(0deg)';
+            if (summaryWrapper) summaryWrapper.classList.remove('open-section');
             
             // Auto open transcript when minimizing/closing summary
             if (transcriptContent) transcriptContent.style.display = 'block';
             if (transcriptIcon) transcriptIcon.style.transform = 'rotate(180deg)';
+            if (transcriptWrapper) transcriptWrapper.classList.add('open-section');
         } else {
             summaryContent.style.display = 'block';
             if (summaryIcon) summaryIcon.style.transform = 'rotate(180deg)';
+            if (summaryWrapper) summaryWrapper.classList.add('open-section');
             
             if (transcriptContent) transcriptContent.style.display = 'none';
             if (transcriptIcon) transcriptIcon.style.transform = 'rotate(0deg)';
+            if (transcriptWrapper) transcriptWrapper.classList.remove('open-section');
             
             // Auto-trigger summary generation if it's currently empty or has the placeholder
             const summaryInner = summaryContent.innerHTML || "";
@@ -2427,11 +2573,13 @@ window.toggleAccordionSection = function(sectionType, recId) {
         if (isCurrentlyOpen) {
             if (transcriptContent) transcriptContent.style.display = 'none';
             if (transcriptIcon) transcriptIcon.style.transform = 'rotate(0deg)';
+            if (transcriptWrapper) transcriptWrapper.classList.remove('open-section');
             
             // Auto open summary when minimizing/closing transcript
             if (summaryContent) {
                 summaryContent.style.display = 'block';
                 if (summaryIcon) summaryIcon.style.transform = 'rotate(180deg)';
+                if (summaryWrapper) summaryWrapper.classList.add('open-section');
                 
                 // Auto-trigger summary generation if it's currently empty or has the placeholder
                 const summaryInner = summaryContent.innerHTML || "";
@@ -2444,9 +2592,11 @@ window.toggleAccordionSection = function(sectionType, recId) {
         } else {
             if (transcriptContent) transcriptContent.style.display = 'block';
             if (transcriptIcon) transcriptIcon.style.transform = 'rotate(180deg)';
+            if (transcriptWrapper) transcriptWrapper.classList.add('open-section');
             
             if (summaryContent) summaryContent.style.display = 'none';
             if (summaryIcon) summaryIcon.style.transform = 'rotate(0deg)';
+            if (summaryWrapper) summaryWrapper.classList.remove('open-section');
         }
     }
 };
@@ -2932,6 +3082,97 @@ async function triggerPDFDownload(event, recId, type) {
                 contentText = rec.transcript || 'No transcript text recorded.';
             }
 
+            // Detect if the content contains Bengali characters (which require complex ligature rendering not supported by jsPDF)
+            const hasBengali = /[\u0980-\u09FF]/.test(contentText);
+            if (hasBengali) {
+                showCustomToast('Opening print preview. Please select "Save as PDF" to download.', 'info');
+
+                let formattedContentHTML = '';
+                if (type === 'summary') {
+                    formattedContentHTML = formatMarkdown(contentText)
+                        .replace(/var\(--text-secondary\)/g, '#282828')
+                        .replace(/var\(--text-primary\)/g, '#282828');
+                } else {
+                    formattedContentHTML = contentText.split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line !== '')
+                        .map(line => `<p style="margin-bottom: 12px; line-height: 1.6; color: #282828;">${escapeHtml(line)}</p>`)
+                        .join('');
+                }
+
+                // Create a temporary print element
+                const printContainer = document.createElement('div');
+                printContainer.id = 'mythbrain-print-section';
+                printContainer.innerHTML = `
+                    <div style="max-width: 800px; margin: 0 auto; background: #fff; padding: 20px; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        <!-- Header -->
+                        <div style="border-bottom: 2px solid #E8DFD0; padding-bottom: 12px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: flex-end;">
+                            <div>
+                                <div style="font-size: 26px; font-weight: 700; color: #493728; font-family: serif;">MythBrain AI</div>
+                                <div style="font-size: 11px; color: #787878; text-transform: uppercase; letter-spacing: 1px;">AI-Powered Meeting Recorder & Intelligence</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Meeting Details -->
+                        <h1 style="font-size: 24px; font-weight: 700; color: #282828; margin: 0 0 8px 0; line-height: 1.2; font-family: serif;">${escapeHtml(title)}</h1>
+                        <div style="font-size: 12px; color: #646464; margin-bottom: 25px; border-bottom: 1px solid #FAF6F0; padding-bottom: 12px;">
+                            <strong>Date:</strong> ${escapeHtml(date)} &nbsp;&bull;&nbsp; 
+                            <strong>Time:</strong> ${escapeHtml(time)} &nbsp;&bull;&nbsp; 
+                            <strong>Duration:</strong> ${escapeHtml(duration)}
+                        </div>
+                        
+                        <!-- Type -->
+                        <h2 style="font-size: 16px; font-weight: 700; color: #493728; border-bottom: 1px solid #FAF6F0; padding-bottom: 6px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHtml(headingText)}</h2>
+                        
+                        <!-- Content -->
+                        <div style="font-size: 14px; color: #282828; line-height: 1.6;">
+                            ${formattedContentHTML}
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(printContainer);
+
+                // Add print-specific styles dynamically
+                const styleEl = document.createElement('style');
+                styleEl.id = 'mythbrain-print-styles';
+                styleEl.textContent = `
+                    @media print {
+                        body > * {
+                            display: none !important;
+                        }
+                        #mythbrain-print-section {
+                            display: block !important;
+                            position: absolute !important;
+                            left: 0 !important;
+                            top: 0 !important;
+                            width: 100% !important;
+                            background: #fff !important;
+                            padding: 0 !important;
+                            margin: 0 !important;
+                        }
+                    }
+                    @media screen {
+                        #mythbrain-print-section {
+                            display: none !important;
+                        }
+                    }
+                `;
+                document.head.appendChild(styleEl);
+
+                // Trigger print
+                setTimeout(() => {
+                    window.print();
+                    
+                    // Cleanup
+                    document.body.removeChild(printContainer);
+                    document.head.removeChild(styleEl);
+                    if (window.closeDownloadChoice) window.closeDownloadChoice();
+                }, 300);
+
+                return;
+            }
+
             // Generate PDF using jsPDF
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({
@@ -2995,8 +3236,15 @@ async function triggerPDFDownload(event, recId, type) {
             doc.setDrawColor(240, 235, 225);
             doc.line(margin, y - 4, pageWidth - margin, y - 4);
 
-            // Clean up text by removing carriage returns to fix the letter stretching bug in jsPDF
-            const cleanText = contentText.replace(/\r/g, '');
+            // Clean up and normalize text to fix the letter stretching bug in jsPDF
+            const cleanText = contentText
+                .replace(/\r/g, '') // remove carriage returns
+                .replace(/\u00A0/g, ' ') // replace non-breaking spaces with normal spaces
+                .replace(/\u200B/g, '') // remove zero-width spaces
+                .replace(/[\u2018\u2019]/g, "'") // replace curly single quotes
+                .replace(/[\u201C\u201D]/g, '"') // replace curly double quotes
+                .replace(/[\u2013\u2014]/g, '-') // replace en/em dashes
+                .replace(/\u2026/g, '...'); // replace ellipses
             const rawLines = cleanText.split('\n');
 
             const checkPageOverflow = (heightNeeded) => {

@@ -722,6 +722,11 @@ switch ($action) {
         
         $context = $rec['transcript'] ?: 'No transcript text available.';
         
+        // Truncate long transcript to prevent Groq TPM/Rate limit errors
+        if (safeStrlen($context) > 20000) {
+            $context = safeSubstr($context, 0, 20000) . "... [Transcript truncated due to length limits]";
+        }
+        
         $meetingDate = date('d F, Y', strtotime($rec['date']));
         $startTime = date('h:i A', strtotime($rec['start_time']));
         $endTime = $rec['end_time'] ? date('h:i A', strtotime($rec['end_time'])) : 'Ongoing';
@@ -732,7 +737,7 @@ switch ($action) {
         ];
         
         $userSettings = getOrCreateUserSettings($user['id'], $db);
-        $reply = callGroqLLM($messages, $userSettings, $db);
+        $reply = callGroqLLM($messages, $userSettings, $db, $userSettings['meeting_chat_tokens'] ?? 128);
         
         returnSuccess(['response' => $reply]);
         break;
@@ -746,15 +751,30 @@ switch ($action) {
             returnError('Message cannot be empty.');
         }
         
-        // Retrieve all completed transcripts for the user
-        $stmt = $db->prepare("SELECT title, date, transcript FROM recordings WHERE user_id = ? AND status = 'completed' AND transcript IS NOT NULL ORDER BY id DESC LIMIT 15");
+        // Retrieve last 10 completed recordings for the user (using both summary and transcript columns)
+        $stmt = $db->prepare("SELECT title, date, transcript, summary FROM recordings WHERE user_id = ? AND status = 'completed' ORDER BY id DESC LIMIT 10");
         $stmt->execute([$user['id']]);
         $meetings = $stmt->fetchAll();
         
         $compiledContext = "";
         foreach ($meetings as $meet) {
             $compiledContext .= "--- Meeting: " . $meet['title'] . " on " . date('d M Y', strtotime($meet['date'])) . " ---\n";
-            $compiledContext .= $meet['transcript'] . "\n\n";
+            if (!empty($meet['summary'])) {
+                // Strip HTML tags from summary to save tokens
+                $cleanSummary = strip_tags($meet['summary']);
+                if (safeStrlen($cleanSummary) > 1500) {
+                    $cleanSummary = safeSubstr($cleanSummary, 0, 1500) . "...";
+                }
+                $compiledContext .= "Summary: " . $cleanSummary . "\n\n";
+            } else if (!empty($meet['transcript'])) {
+                $cleanTranscript = strip_tags($meet['transcript']);
+                if (safeStrlen($cleanTranscript) > 1000) {
+                    $cleanTranscript = safeSubstr($cleanTranscript, 0, 1000) . "...";
+                }
+                $compiledContext .= "Transcript Excerpt: " . $cleanTranscript . "\n\n";
+            } else {
+                $compiledContext .= "No text content available.\n\n";
+            }
         }
         
         if (empty($compiledContext)) {
@@ -762,12 +782,12 @@ switch ($action) {
         }
         
         $messages = [
-            ["role" => "system", "content" => "You are MythBrain AI, an expert analytical assistant. The user wants to query their entire knowledge base of past meeting recordings. Utilize the meeting contexts below to answer the user's questions clearly, summarising across multiple meetings if needed. Identify meetings by title or date when citing facts.\n\nKnowledge Base:\n" . $compiledContext],
+            ["role" => "system", "content" => "You are MythBrain AI, an expert analytical assistant. The user wants to query their entire knowledge base of past meeting recordings. You must answer the user's questions strictly and ONLY based on the meeting contexts (Knowledge Base) provided below. If a question is about general knowledge, other topics, or cannot be answered or inferred using the provided Knowledge Base, you MUST decline to answer and state that you can only answer questions related to the recorded meetings in your Knowledge Base. Do not discuss any topics outside the meeting recordings. Format your responses with clear spacing, bold headings, and lists to make them highly readable and professional. Identify meetings by title or date when citing facts.\n\nKnowledge Base:\n" . $compiledContext],
             ["role" => "user", "content" => $message]
         ];
         
         $userSettings = getOrCreateUserSettings($user['id'], $db);
-        $reply = callGroqLLM($messages, $userSettings, $db);
+        $reply = callGroqLLM($messages, $userSettings, $db, $userSettings['assistant_chat_tokens'] ?? 512);
         
         returnSuccess(['response' => $reply]);
         break;
@@ -793,12 +813,12 @@ switch ($action) {
         $userSettings = getOrCreateUserSettings($user['id'], $db);
         $summary = generateSummary($transcript, $userSettings, $db);
         
-        if ($summary) {
+        if ($summary && strpos($summary, 'Groq API Error') === false && strpos($summary, 'key not configured') === false && strpos($summary, 'Failed to generate') === false) {
             $stmtUpdate = $db->prepare("UPDATE recordings SET summary = ? WHERE id = ?");
             $stmtUpdate->execute([$summary, $recId]);
             returnSuccess(['summary' => $summary, 'message' => 'Summary regenerated successfully!']);
         } else {
-            returnError('Failed to generate summary via Groq.');
+            returnError($summary ?: 'Failed to generate summary via Groq.');
         }
         break;
         
@@ -818,6 +838,9 @@ switch ($action) {
         $maxTokens = intval($data['max_response_tokens'] ?? 1024);
         $temperature = isset($data['temperature']) ? floatval($data['temperature']) : 0.7;
         $transLang = trim($data['transcription_language'] ?? 'bn');
+        $summaryTokens = intval($data['summary_tokens'] ?? 128);
+        $meetingChatTokens = intval($data['meeting_chat_tokens'] ?? 128);
+        $assistantChatTokens = intval($data['assistant_chat_tokens'] ?? 512);
         
         if ($maxTokens <= 0) $maxTokens = 1024;
         if ($temperature < 0.0) $temperature = 0.0;
@@ -825,13 +848,22 @@ switch ($action) {
         if (!in_array($transLang, ['bn', 'en', 'multi'])) {
             $transLang = 'bn';
         }
+        if (!in_array($summaryTokens, [64, 128, 512])) {
+            $summaryTokens = 128;
+        }
+        if (!in_array($meetingChatTokens, [128, 512, 1024, 2048])) {
+            $meetingChatTokens = 128;
+        }
+        if (!in_array($assistantChatTokens, [128, 512, 1024, 2048])) {
+            $assistantChatTokens = 512;
+        }
         
         $stmt = $db->prepare("
             UPDATE user_settings 
-            SET deepgram_api_key = ?, groq_api_key = ?, groq_model = ?, max_response_tokens = ?, temperature = ?, transcription_language = ? 
+            SET deepgram_api_key = ?, groq_api_key = ?, groq_model = ?, max_response_tokens = ?, temperature = ?, transcription_language = ?, summary_tokens = ?, meeting_chat_tokens = ?, assistant_chat_tokens = ? 
             WHERE user_id = ?
         ");
-        $stmt->execute([$dgKey, $groqKey, $groqModel, $maxTokens, $temperature, $transLang, $user['id']]);
+        $stmt->execute([$dgKey, $groqKey, $groqModel, $maxTokens, $temperature, $transLang, $summaryTokens, $meetingChatTokens, $assistantChatTokens, $user['id']]);
         
         returnSuccess(['message' => 'API Configuration keys updated successfully.']);
         break;
@@ -1096,21 +1128,75 @@ function callDeepgramSTT($audioData, $apiKey, $language = 'bn') {
     return $resData['results']['channels'][0]['alternatives'][0]['transcript'] ?? '';
 }
 
-function callGroqLLM($messages, $settings, $db) {
+function safeStrlen($str) {
+    if (function_exists('mb_strlen')) {
+        return mb_strlen($str, 'UTF-8');
+    }
+    return strlen($str);
+}
+
+function safeSubstr($str, $start, $length = null) {
+    if (function_exists('mb_substr')) {
+        return mb_substr($str, $start, $length, 'UTF-8');
+    }
+    $sub = ($length === null) ? substr($str, $start) : substr($str, $start, $length);
+    if (function_exists('mb_convert_encoding')) {
+        return mb_convert_encoding($sub, 'UTF-8', 'UTF-8');
+    }
+    return $sub;
+}
+
+function safeStrrpos($haystack, $needle) {
+    if (function_exists('mb_strrpos')) {
+        return mb_strrpos($haystack, $needle, 0, 'UTF-8');
+    }
+    return strrpos($haystack, $needle);
+}
+
+function callGroqLLM($messages, $settings, $db, $maxTokensOverride = null) {
     $apiKey = $settings['groq_api_key'] ?: getenv('GROQ_API_KEY');
     $model = $settings['groq_model'] ?: getenv('GROQ_MODEL') ?: 'openai/gpt-oss-120b';
-    $maxTokens = intval($settings['max_response_tokens'] ?: getenv('MAX_RESPONSE_TOKENS') ?: 1024);
+    $maxTokens = $maxTokensOverride !== null ? intval($maxTokensOverride) : intval($settings['max_response_tokens'] ?: getenv('MAX_RESPONSE_TOKENS') ?: 1024);
     $temperature = isset($settings['temperature']) ? floatval($settings['temperature']) : 0.7;
     
     if (empty($apiKey)) {
         return "Groq API key not configured in settings. Please configure your API key to use AI features.";
     }
+
+    // Append length instruction to the system prompt to guide the LLM's natural length limit
+    $wordLimit = intval($maxTokens * 0.75);
+    $lengthInstruction = "\n\nCRITICAL LENGTH REQUIREMENT: You must keep your response concise, complete, and strictly under approx {$wordLimit} words. Ensure your thoughts are fully complete and do NOT cut off mid-sentence or mid-bullet.";
+    
+    $modifiedMessages = [];
+    $systemPromptModified = false;
+    foreach ($messages as $msg) {
+        $item = [
+            'role' => $msg['role'] ?? '',
+            'content' => $msg['content'] ?? ''
+        ];
+        if ($item['role'] === 'system' && !$systemPromptModified) {
+            $item['content'] .= $lengthInstruction;
+            $systemPromptModified = true;
+        }
+        $modifiedMessages[] = $item;
+    }
+    
+    // If there is no system prompt, prepend one
+    if (!$systemPromptModified) {
+        array_unshift($modifiedMessages, [
+            "role" => "system",
+            "content" => trim($lengthInstruction)
+        ]);
+    }
+    
+    // Set a safe completion limit for the physical API call to avoid raw truncation mid-sentence
+    $apiMaxTokens = max($maxTokens, 1024);
     
     $url = "https://api.groq.com/openai/v1/chat/completions";
     $payload = [
         "model" => $model,
-        "messages" => $messages,
-        "max_tokens" => $maxTokens,
+        "messages" => $modifiedMessages,
+        "max_tokens" => $apiMaxTokens,
         "temperature" => $temperature
     ];
     
@@ -1119,9 +1205,17 @@ function callGroqLLM($messages, $settings, $db) {
         "Content-Type: application/json"
     ];
     
+    $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    if ($jsonPayload === false) {
+        $jsonPayload = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+    if ($jsonPayload === false) {
+        return "Groq API Error: PHP JSON serialization failed: " . json_last_error_msg();
+    }
+    
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -1138,9 +1232,17 @@ function callGroqLLM($messages, $settings, $db) {
         $fallbackModel = 'llama-3.3-70b-versatile';
         $payload['model'] = $fallbackModel;
         
+        $jsonPayloadFallback = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($jsonPayloadFallback === false) {
+            $jsonPayloadFallback = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+        if ($jsonPayloadFallback === false) {
+            return "Groq API Error: PHP JSON serialization failed on fallback: " . json_last_error_msg();
+        }
+        
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayloadFallback);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -1169,9 +1271,60 @@ function callGroqLLM($messages, $settings, $db) {
 }
 
 function generateSummary($transcript, $settings, $db) {
+    $chunkSize = 15000;
+    
+    // If the transcript is within the size limit, summarize in a single pass
+    if (safeStrlen($transcript) <= $chunkSize) {
+        $messages = [
+            ["role" => "system", "content" => "You are an AI assistant designed to summarize meeting transcripts in a professional, clean, Claude-like chatbot style. Provide a comprehensive summary including: key topics discussed, important decisions made, and clear actionable bullet points for follow-up. Keep the summary highly professional, beautifully spaced, and structured.\n\nCRITICAL:\n1. Do NOT use markdown tables or table character separators (such as |).\n2. Do NOT use horizontal rules, separator lines, or dashes (such as ---, ----, or ===).\n3. Do NOT use raw markdown formatting symbols like # or * inside your plain text (for bold headings, you may use **). \n4. Make sure all main headings, key sections, and core topics are in bold (using **Heading**).\n5. Use clean spacing, standard paragraphs, and clear bullet points (- item) for lists."],
+            ["role" => "user", "content" => "Please summarize the following meeting transcript:\n\n" . $transcript]
+        ];
+        return callGroqLLM($messages, $settings, $db, $settings['summary_tokens'] ?? 128);
+    }
+    
+    // Otherwise, chunk the transcript to keep it under token limits
+    $chunks = [];
+    $length = safeStrlen($transcript);
+    $start = 0;
+    while ($start < $length) {
+        if ($start + $chunkSize >= $length) {
+            $chunks[] = safeSubstr($transcript, $start);
+            break;
+        }
+        // Find a space to split to avoid cutting words in half
+        $endPos = safeStrrpos(safeSubstr($transcript, $start, $chunkSize), ' ');
+        if ($endPos === false) {
+            $endPos = $chunkSize;
+        }
+        $chunks[] = safeSubstr($transcript, $start, $endPos);
+        $start += $endPos + 1;
+    }
+    
+    // Summarize each segment
+    $chunkSummaries = [];
+    foreach ($chunks as $index => $chunk) {
+        $messages = [
+            ["role" => "system", "content" => "You are an AI assistant summarizing a part of a long meeting transcript. Extract the key discussion points, decisions made, and tasks mentioned in this segment. Keep it concise."],
+            ["role" => "user", "content" => "Summarize this segment of the transcript (Part " . ($index + 1) . " of " . count($chunks) . "):\n\n" . $chunk]
+        ];
+        $chunkSummary = callGroqLLM($messages, $settings, $db, 128);
+        if ($chunkSummary && strpos($chunkSummary, "Groq API Error") === false && strpos($chunkSummary, "key not configured") === false) {
+            $chunkSummaries[] = $chunkSummary;
+        }
+    }
+    
+    if (empty($chunkSummaries)) {
+        return "Failed to generate intermediate segment summaries.";
+    }
+    
+    // Combine segment summaries
+    $combinedSegmentText = implode("\n\n", $chunkSummaries);
+    
+    // Generate final master summary from the combined segment summaries
     $messages = [
-        ["role" => "system", "content" => "You are an AI assistant designed to summarize meeting transcripts in a professional, clean, Claude-like chatbot style. Provide a comprehensive summary including: key topics discussed, important decisions made, and clear actionable bullet points for follow-up. Keep the summary highly professional, beautifully spaced, and structured.\n\nCRITICAL:\n1. Do NOT use markdown tables or table character separators (such as |).\n2. Do NOT use horizontal rules, separator lines, or dashes (such as ---, ----, or ===).\n3. Do NOT use raw markdown formatting symbols like # or * inside your plain text (for bold headings, you may use **). \n4. Make sure all main headings, key sections, and core topics are in bold (using **Heading**).\n5. Use clean spacing, standard paragraphs, and clear bullet points (- item) for lists."],
-        ["role" => "user", "content" => "Please summarize the following meeting transcript:\n\n" . $transcript]
+        ["role" => "system", "content" => "You are an AI assistant designed to merge multiple segment summaries of a meeting into a single master summary in a professional, clean, Claude-like chatbot style. Provide a comprehensive summary including: key topics discussed, important decisions made, and clear actionable bullet points for follow-up. Keep the summary highly professional, beautifully spaced, and structured.\n\nCRITICAL:\n1. Do NOT use markdown tables or table character separators (such as |).\n2. Do NOT use horizontal rules, separator lines, or dashes (such as ---, ----, or ===).\n3. Do NOT use raw markdown formatting symbols like # or * inside your plain text (for bold headings, you may use **). \n4. Make sure all main headings, key sections, and core topics are in bold (using **Heading**).\n5. Use clean spacing, standard paragraphs, and clear bullet points (- item) for lists."],
+        ["role" => "user", "content" => "Here are the summaries of different segments of the meeting. Please combine them into a single coherent, master meeting summary:\n\n" . $combinedSegmentText]
     ];
-    return callGroqLLM($messages, $settings, $db);
+    
+    return callGroqLLM($messages, $settings, $db, $settings['summary_tokens'] ?? 128);
 }

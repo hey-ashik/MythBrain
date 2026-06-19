@@ -128,6 +128,24 @@ try {
         if (!$stmtColLang->fetch()) {
             $db->exec("ALTER TABLE `user_settings` ADD COLUMN `transcription_language` VARCHAR(20) DEFAULT 'bn' AFTER `temperature`");
         }
+
+        // Upgrade user_settings table if summary_tokens column is missing
+        $stmtColSum = $db->query("SHOW COLUMNS FROM `user_settings` LIKE 'summary_tokens'");
+        if (!$stmtColSum->fetch()) {
+            $db->exec("ALTER TABLE `user_settings` ADD COLUMN `summary_tokens` INT DEFAULT 128 AFTER `transcription_language`");
+        }
+
+        // Upgrade user_settings table if meeting_chat_tokens column is missing
+        $stmtColMc = $db->query("SHOW COLUMNS FROM `user_settings` LIKE 'meeting_chat_tokens'");
+        if (!$stmtColMc->fetch()) {
+            $db->exec("ALTER TABLE `user_settings` ADD COLUMN `meeting_chat_tokens` INT DEFAULT 128 AFTER `summary_tokens`");
+        }
+
+        // Upgrade user_settings table if assistant_chat_tokens column is missing
+        $stmtColAc = $db->query("SHOW COLUMNS FROM `user_settings` LIKE 'assistant_chat_tokens'");
+        if (!$stmtColAc->fetch()) {
+            $db->exec("ALTER TABLE `user_settings` ADD COLUMN `assistant_chat_tokens` INT DEFAULT 512 AFTER `meeting_chat_tokens`");
+        }
     }
 } catch (PDOException $e) {
     // getDB() inside API calls will trigger exit and display the error
